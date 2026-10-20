@@ -31,8 +31,11 @@ export const HEALTH_EMOJI: Record<Health, string> = {
   [Health.Down]: '🔴',
 };
 
-/** Background refresh is a port scan only: it never touches the servers, and never replaces an open menu. */
-export const TRAY_REFRESH_MS = 3000;
+/**
+ * Background refresh is a port scan only: it never touches the servers, and never replaces an open
+ * menu. Windows scans go through PowerShell (1-6 s each), so they run less often there.
+ */
+export const TRAY_REFRESH_MS = process.platform === 'win32' ? 10_000 : 3000;
 /** Native menu items don't wrap; explanations are split into lines this long. */
 export const MENU_TEXT_WIDTH = 46;
 /** Health is checked when the menu opens and reused for this long, so servers that log every request aren't spammed. */

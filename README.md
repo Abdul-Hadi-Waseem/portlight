@@ -92,10 +92,18 @@ Portlight runs entirely on your Mac: no account, no analytics, no network calls 
 
 ## Requirements
 
-- macOS (Apple Silicon or Intel)
+- macOS (Apple Silicon or Intel), or Windows 10/11 (beta: `npm install -g portlight@beta`)
 - Node.js 20 or newer
 
-Windows support is planned.
+### On Windows (beta)
+
+Everything above works, with three differences that come from Windows itself:
+
+- **Stopping is a force-stop.** Windows has no polite "please quit" for terminal programs, so after the same identity checks Portlight ends the process directly.
+- **Project names come from the command line.** Windows doesn't reveal another program's working folder, so `node C:\code\shop\node_modules\.bin\vite` is named *shop*; a server started some other way shows its program name.
+- **Scans are slower** (PowerShell), so the menu refreshes every 10 seconds; opening it always shows a fresh list.
+
+Stopping a Windows service (an installed PostgreSQL, say) asks for administrator approval (UAC).
 
 ## License
 

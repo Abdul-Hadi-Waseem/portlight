@@ -24,6 +24,3 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Probe diagnostics
-        if: always()
-        run: node scripts/probe-diagnostics.mjs
