@@ -57,10 +57,10 @@ async function listListeners(): Promise<Listener[]> {
   return parseWinListeners(asRows<WinListenerRow>(data.listeners), names);
 }
 
-async function getProcesses(pids: number[]): Promise<Map<number, ProcessInfo>> {
+async function getProcesses(pids: number[], { fresh = false }: { fresh?: boolean } = {}): Promise<Map<number, ProcessInfo>> {
   const wanted = [...new Set(pids)].filter((pid) => Number.isInteger(pid) && pid > 0);
   if (wanted.length === 0) return new Map();
-  if (lastScan && Date.now() - lastScan.at < SCAN_REUSE_MS && wanted.every((pid) => lastScan!.processes.has(pid))) {
+  if (!fresh && lastScan && Date.now() - lastScan.at < SCAN_REUSE_MS && wanted.every((pid) => lastScan!.processes.has(pid))) {
     return new Map(wanted.map((pid) => [pid, lastScan!.processes.get(pid)!]));
   }
   const { stdout } = await powershell(PROCESSES_SCRIPT, { PL_PIDS: wanted.join(',') });
@@ -122,7 +122,11 @@ async function openFolder(folder: string, app: string | null): Promise<void> {
   if (!path.win32.isAbsolute(folder)) throw new Error(`Not a folder path: ${folder}`);
   const exe = app ? editorExe(app) : 'explorer.exe';
   if (!exe) throw new Error(`${app} is not installed.`);
-  const child = spawn(exe, app ? [folder] : [`/select,${folder}`], { detached: true, stdio: 'ignore', windowsHide: false });
+  // Explorer parses its own command line: /select,"<folder>" verbatim, so commas in names are safe
+  // (Windows paths can't contain quotes).
+  const child = app
+    ? spawn(exe, [folder], { detached: true, stdio: 'ignore' })
+    : spawn(exe, [`/select,"${folder}"`], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true });
   child.unref();
 }
 
@@ -174,10 +178,16 @@ function setStartAtLogin(item: { command: string[]; logFile: string } | null): v
     rmSync(launcherFile(), { force: true });
     return;
   }
-  // WScript.Shell.Run gets one command string: each argument quoted, quotes doubled for VBScript.
+  // WshShell.Run expands %VARIABLES% in its command: a literal % in a path can't be expressed safely.
+  if (item.command.some((arg) => arg.includes('%') || arg.includes('"'))) {
+    throw new Error('Portlight is installed in a folder whose path contains % or ": autostart cannot use it.');
+  }
+  // One command string: each argument quoted, quotes doubled for VBScript.
   const commandLine = item.command.map((arg) => `""${arg}""`).join(' ');
   mkdirSync(stateDir(), { recursive: true });
-  writeFileSync(launcherFile(), `CreateObject("WScript.Shell").Run "${commandLine}", 0, False\r\n`);
+  // UTF-16LE with a BOM: wscript reads BOM-less files in the ANSI code page, which breaks C:\\Users\\Müller.
+  const script = `CreateObject("WScript.Shell").Run "${commandLine}", 0, False\r\n`;
+  writeFileSync(launcherFile(), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(script, 'utf16le')]));
   execFileSync('reg', ['add', WINDOWS_RUN_KEY, '/v', WINDOWS_RUN_VALUE, '/t', 'REG_SZ', '/d', `wscript.exe ${vbsQuote(launcherFile())}`, '/f'], {
     windowsHide: true,
     stdio: 'ignore',

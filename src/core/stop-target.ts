@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { stopContainer } from '../sources/docker.js';
 import { DEV_RUNTIME_NAMES, STOP_GRACE_MS } from './constants.js';
-import { currentUser } from './scan.js';
+import { currentUser, sameUser } from './scan.js';
 import { refusalReason, stopServer, waitForExit, type StopOptions } from './stop.js';
 import { AdminOutcome, ServerKind, StopOutcome, type PlatformAdapter, type Server, type StopResult } from './types.js';
 
@@ -34,7 +34,7 @@ export function canStopAsAdmin(server: Pick<Server, 'kind' | 'processName' | 'cw
 
 /** Stopping it will show the macOS password dialog. */
 export function needsPassword(server: Pick<Server, 'container' | 'user'>, me: string): boolean {
-  return !server.container && server.user !== me;
+  return !server.container && !sameUser(server.user, me);
 }
 
 /**
@@ -68,13 +68,13 @@ export async function stopTarget(platform: PlatformAdapter, server: Server, opti
   try {
     if (!(await platform.isRunning(pid))) return result(StopOutcome.AlreadyGone);
     const me = currentUser();
-    const live = (await platform.getProcesses([pid])).get(pid);
+    const live = (await platform.getProcesses([pid], { fresh: true })).get(pid);
     const refusal = refusalReason(server, live, me, { allowOtherUser });
     if (refusal) return result(StopOutcome.Refused, refusal);
 
     const job = await platform.findServiceJob(pid);
     const viaManager = job !== null && (job.keepAlive || job.needsAdmin || job.homebrewFormula !== null);
-    if (!viaManager && live?.user === me) return stopServer(platform, server, { ...options, allowOtherUser });
+    if (!viaManager && live && sameUser(live.user, me)) return stopServer(platform, server, { ...options, allowOtherUser });
     // Another user's process with no service manager: only one started from the user's own folders.
     if (!viaManager && !startedInHome(server, os.homedir())) {
       return result(StopOutcome.Refused, 'not run by a service, and not started from your folders');

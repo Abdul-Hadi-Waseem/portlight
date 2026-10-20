@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { ALIVE_POLL_MS, Signal, STOP_FORCE_WAIT_MS, STOP_GRACE_MS } from './constants.js';
-import { classify, currentUser } from './scan.js';
+import { classify, currentUser, sameUser } from './scan.js';
 import { ServerKind, StopOutcome, type PlatformAdapter, type ProcessInfo, type Server, type StopResult } from './types.js';
 
 export interface StopOptions {
@@ -21,7 +21,7 @@ export interface RefusalOptions {
  */
 export function refusalReason(target: Server, live: Identity | undefined, me: string, options: RefusalOptions = {}): string | null {
   if (!live || !live.user) return `could not read details for PID ${target.pid} (it may have just exited)`;
-  if (live.user !== me && !options.allowOtherUser) return `owned by ${live.user || 'another user'}, not ${me}`;
+  if (!sameUser(live.user, me) && !options.allowOtherUser) return `owned by ${live.user || 'another user'}, not ${me}`;
   // Judge the program itself (path, runtime), relative to whoever owns it.
   const kind = classify(live, live.user);
   if (kind === ServerKind.System) return 'system process, left alone';
@@ -69,7 +69,8 @@ export async function stopServer(
   const { pid, port } = target;
   const me = currentUser();
   const result = (outcome: StopOutcome, reason?: string): StopResult => ({ pid, port, outcome, reason });
-  const verify = async () => refusalReason(target, (await platform.getProcesses([pid])).get(pid), me, options);
+  // fresh: never answered from the scan the target came from (Windows reuses pids quickly).
+  const verify = async () => refusalReason(target, (await platform.getProcesses([pid], { fresh: true })).get(pid), me, options);
 
   try {
     if (!(await platform.isRunning(pid))) return result(StopOutcome.AlreadyGone);

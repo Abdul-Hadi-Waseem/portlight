@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { projectFromCommand, splitCommandLine } from '../src/core/detect.js';
-import { classify } from '../src/core/scan.js';
+import { classify, sameUser } from '../src/core/scan.js';
 import { ServerKind } from '../src/core/types.js';
 import { encodePowerShell } from '../src/platform/win32.js';
 import { asRows, normalizeWinAddress, parseWinListeners, parseWinProcesses, stripExe } from '../src/platform/win32-parse.js';
@@ -53,7 +53,7 @@ test('PowerShell -EncodedCommand is base64 of UTF-16LE', () => {
 });
 
 test('elevated scripts are built only from validated parts', () => {
-  assert.equal(stopServiceScript('postgresql-x64-16'), "Stop-Service -Name 'postgresql-x64-16' -Force -ErrorAction Stop");
+  assert.equal(stopServiceScript('postgresql-x64-16'), "Stop-Service -Name 'postgresql-x64-16' -ErrorAction Stop", 'no -Force: dependents are not stopped silently');
   const script = terminateScript(8120, '2026-10-21T09:15:02.123Z');
   assert.match(script, /Get-Process -Id 8120/);
   assert.match(script, /-ne '2026-10-21T09:15:02\.123Z'\) \{ exit 3 \}/, 'checks the start time inside the elevated shell');
@@ -89,4 +89,10 @@ test('Windows paths: C:\\Windows is the system, Program Files and AppData Progra
   assert.equal(classify(info('Code', '"C:\\Users\\hadi\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe" --type=utility'), 'hadi'), ServerKind.App);
   assert.equal(classify(info('Spotify', '"C:\\Program Files\\Spotify\\Spotify.exe"'), 'hadi'), ServerKind.App);
   assert.equal(classify(info('node', '"C:\\Program Files\\nodejs\\node.exe" server.js'), 'hadi'), ServerKind.Dev, 'a dev runtime even from Program Files');
+});
+
+test('user names: case-insensitive on Windows, exact elsewhere', () => {
+  assert.equal(sameUser('Hadi', 'hadi'), process.platform === 'win32');
+  assert.equal(sameUser('hadi', 'hadi'), true);
+  assert.equal(sameUser('hadi', 'postgres'), false);
 });

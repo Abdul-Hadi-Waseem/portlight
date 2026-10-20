@@ -31,6 +31,7 @@ async function listListeners(): Promise<Listener[]> {
   return mergeListeners(parseNetstatListeners(netstat.stdout), parseLsofListeners(lsof.stdout));
 }
 
+/** Always reads now: macOS scans are fast, so there is no cached answer to bypass. */
 async function getProcesses(pids: number[]): Promise<Map<number, ProcessInfo>> {
   const processes = new Map<number, ProcessInfo>();
   if (pids.length === 0) return processes;

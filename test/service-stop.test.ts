@@ -22,13 +22,19 @@ const live = (s: Server): ProcessInfo => ({
   startedAt: s.startedAt, commandLine: s.commandLine, cwd: null,
 });
 
+/** What was done, without the process reads. */
+const actions = (calls: string[]) => calls.filter((call) => !call.startsWith('read '));
+
 /** Fake Mac: one process that "exits" once something stops it; records what was asked. */
 function fakePlatform(target: Server, job: ServiceJob | null, admin: AdminOutcome = AdminOutcome.Done) {
   const calls: string[] = [];
   let running = true;
   const platform = {
     isRunning: async () => running,
-    getProcesses: async () => new Map([[target.pid, live(target)]]),
+    getProcesses: async (_pids: number[], options?: { fresh?: boolean }) => {
+      calls.push(options?.fresh ? 'read fresh' : 'read cached');
+      return new Map([[target.pid, live(target)]]);
+    },
     findServiceJob: async () => job,
     stopServiceJob: async (j: ServiceJob) => {
       calls.push(`service ${j.homebrewFormula ? `brew:${j.homebrewFormula}` : j.label}${j.needsAdmin ? ' (password)' : ''}`);
@@ -61,24 +67,24 @@ test("another user's database can be stopped with a password; macOS and unknown 
 
 test('a system launchd service (EDB PostgreSQL) is stopped through launchd, with the password dialog', async () => {
   const target = server();
-  const { platform, calls } = fakePlatform(target, { label: 'postgresql-18', needsAdmin: true, keepAlive: false, homebrewFormula: null });
+  const { platform, calls: allCalls } = fakePlatform(target, { label: 'postgresql-18', needsAdmin: true, keepAlive: false, homebrewFormula: null });
   assert.equal((await stopTarget(platform, target, { graceMs: 200 })).outcome, StopOutcome.Stopped);
-  assert.deepEqual(calls, ['service postgresql-18 (password)']);
+  assert.deepEqual(actions(allCalls), ['service postgresql-18 (password)']);
 });
 
 test('a Homebrew service goes through brew services stop, no password', async () => {
   const target = server({ user: me, commandLine: '/opt/homebrew/opt/redis/bin/redis-server 127.0.0.1:6379', processName: 'redis-server', framework: 'Redis' });
-  const { platform, calls } = fakePlatform(target, { label: 'homebrew.mxcl.redis', needsAdmin: false, keepAlive: true, homebrewFormula: 'redis' });
+  const { platform, calls: allCalls } = fakePlatform(target, { label: 'homebrew.mxcl.redis', needsAdmin: false, keepAlive: true, homebrewFormula: 'redis' });
   assert.equal((await stopTarget(platform, target, { graceMs: 200 })).outcome, StopOutcome.Stopped);
-  assert.deepEqual(calls, ['service brew:redis']);
+  assert.deepEqual(actions(allCalls), ['service brew:redis']);
 });
 
 test("a sudo-run dev server from your folders, no service manager: SIGTERM after the password", async () => {
   const os = await import('node:os');
   const target = server({ processName: 'node', kind: ServerKind.Dev, framework: null, commandLine: 'node server.js', user: 'root', cwd: `${os.homedir()}/code/api` });
-  const { platform, calls } = fakePlatform(target, null);
+  const { platform, calls: allCalls } = fakePlatform(target, null);
   assert.equal((await stopTarget(platform, target, { graceMs: 200 })).outcome, StopOutcome.Stopped);
-  assert.deepEqual(calls, ['admin-term 538']);
+  assert.deepEqual(actions(allCalls), ['admin-term 538']);
 });
 
 test('Cancel in the password dialog is reported as cancelled, not as an error', async () => {
@@ -89,9 +95,9 @@ test('Cancel in the password dialog is reported as cancelled, not as an error', 
 
 test('a changed process is refused before any password dialog', async () => {
   const target = server();
-  const { platform, calls } = fakePlatform({ ...target, startedAt: new Date(2026, 9, 21) }, null);
+  const { platform, calls: allCalls } = fakePlatform({ ...target, startedAt: new Date(2026, 9, 21) }, null);
   assert.equal((await stopTarget(platform, target)).outcome, StopOutcome.Refused);
-  assert.deepEqual(calls, []);
+  assert.deepEqual(actions(allCalls), []);
 });
 
 test("a vendor agent on a dev runtime (root python from /) is never offered, even with a password", () => {
@@ -102,8 +108,17 @@ test("a vendor agent on a dev runtime (root python from /) is never offered, eve
 
 test("another user's recognised service with no service manager and not in your folders is refused at stop time", async () => {
   const target = server({ cwd: '/' });
-  const { platform, calls } = fakePlatform(target, null);
+  const { platform, calls: allCalls } = fakePlatform(target, null);
   const result = await stopTarget(platform, target);
   assert.equal(result.outcome, StopOutcome.Refused);
-  assert.deepEqual(calls, [], 'no password dialog was shown');
+  assert.deepEqual(actions(allCalls), [], 'no password dialog was shown');
+});
+
+test('every check right before stopping reads the process fresh, never from the scan', async () => {
+  const target = server();
+  const { platform, calls } = fakePlatform(target, { label: 'postgresql-18', needsAdmin: true, keepAlive: false, homebrewFormula: null });
+  await stopTarget(platform, target, { graceMs: 200 });
+  const reads = calls.filter((call) => call.startsWith('read '));
+  assert.ok(reads.length > 0);
+  assert.deepEqual(new Set(reads), new Set(['read fresh']));
 });

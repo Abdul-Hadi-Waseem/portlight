@@ -98,7 +98,8 @@ export interface PlatformAdapter {
    */
   gracefulStop: boolean;
   listListeners(): Promise<Listener[]>;
-  getProcesses(pids: number[]): Promise<Map<number, ProcessInfo>>;
+  /** `fresh`: read the processes now, never from an earlier scan (used right before stopping). */
+  getProcesses(pids: number[], options?: { fresh?: boolean }): Promise<Map<number, ProcessInfo>>;
   /** True while the pid exists and has not exited (a zombie counts as exited). */
   isRunning(pid: number): Promise<boolean>;
   openUrl(url: string): Promise<void>;

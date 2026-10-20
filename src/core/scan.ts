@@ -27,6 +27,11 @@ export function appNameOf(commandLine: string): string | null {
   return match?.[1] ? safeText(match[1]) : null;
 }
 
+/** Same account? Windows user names are case-insensitive ("Hadi" and "hadi" are one user). */
+export function sameUser(a: string, b: string): boolean {
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
 export function currentUser(): string {
   return os.userInfo().username;
 }
@@ -37,7 +42,7 @@ export function isContainerRuntime(info: Pick<ProcessInfo, 'name' | 'commandLine
 }
 
 export function classify(info: Pick<ProcessInfo, 'user' | 'name' | 'commandLine'>, me: string): ServerKind {
-  if (info.user !== me) return ServerKind.System;
+  if (!sameUser(info.user, me)) return ServerKind.System;
   if (SYSTEM_PATH_PREFIXES.some((prefix) => info.commandLine.startsWith(prefix)) || WINDOWS_SYSTEM_PATH.test(info.commandLine)) {
     return ServerKind.System;
   }
@@ -197,7 +202,7 @@ export function cannotStopHint(server: Server, refusal: string | null): string {
         ? HOW_TO_STOP.app(server.appName ?? server.processName)
         : server.kind === ServerKind.System
           ? HOW_TO_STOP.system
-          : server.user && server.user !== currentUser()
+          : server.user && !sameUser(server.user, currentUser())
             ? HOW_TO_STOP.otherUser(server.user)
             : refusal
               ? `Portlight won't stop it: ${refusal}.`

@@ -43,8 +43,9 @@ ConvertTo-Json -Compress -Depth 3 -InputObject @{ processes = $p }`;
 export const SERVICE_SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'
 if ($env:PL_PID -match '^[0-9]+$') {
-  $s = Get-CimInstance Win32_Service -Filter "ProcessId=$($env:PL_PID)" | Select-Object -First 1
-  if ($s) { ConvertTo-Json -Compress -InputObject @{ name = $s.Name; startMode = $s.StartMode } }
+  # One host process can run several services: then it's unclear which one, so none is returned.
+  $s = @(Get-CimInstance Win32_Service -Filter "ProcessId=$($env:PL_PID)")
+  if ($s.Count -eq 1) { ConvertTo-Json -Compress -InputObject @{ name = $s[0].Name; startMode = $s[0].StartMode } }
 }`;
 
 /**
@@ -62,9 +63,12 @@ export const ELEVATION_CANCELLED_EXIT = 1223;
 /** Exit code of the elevated terminate script when the process is no longer the one checked. */
 export const PROCESS_CHANGED_EXIT = 3;
 
-/** Elevated: stop a service by its (validated) name. */
+/**
+ * Elevated: stop a service by its (validated) name. No -Force: if other services depend on it,
+ * Windows refuses and says so, instead of stopping those too behind the user's back.
+ */
 export function stopServiceScript(name: string): string {
-  return `Stop-Service -Name '${name}' -Force -ErrorAction Stop`;
+  return `Stop-Service -Name '${name}' -ErrorAction Stop`;
 }
 
 /** Elevated: force-stop `pid` only if it still started at `isoUtc` (checked inside the elevated shell). */
