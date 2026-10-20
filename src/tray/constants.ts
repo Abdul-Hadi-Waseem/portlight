@@ -41,6 +41,8 @@ export const TRAY_PID_FILE = path.join(STATE_DIR, 'tray.json');
 export const TRAY_COMMAND_MARKER = 'tray --foreground';
 export const CLI_ENTRY_NAME = 'main.js';
 export const TRAY_LOG_FILE = path.join(STATE_DIR, 'tray.log');
+/** Exists once the welcome message has been shown. */
+export const WELCOMED_FILE = path.join(STATE_DIR, 'welcomed');
 
 export const ASSETS_DIR = new URL('../../../assets/', import.meta.url);
 export const TRAY_ICON_PNG = new URL('tray-icon.png', ASSETS_DIR);

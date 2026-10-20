@@ -44,7 +44,7 @@ test('buildMenu: sections, health dots, names, and secondary ports tucked away',
     'SERVICES',
     '⚪  PostgreSQL · 5432',
     'Other ports (1)',
-    'Start at login',
+    'Start automatically when my Mac starts',
     'Quit Portlight',
   ]);
   const ids = allIds(menu);
@@ -65,7 +65,7 @@ test('buildMenu: sections, health dots, names, and secondary ports tucked away',
 
 test('buildMenu says so when nothing is running', () => {
   const menu = buildMenu({ servers: [], health: new Map(), refusals: new Map(), now: Date.now(), startAtLogin: false });
-  assert.deepEqual(titles(menu), ['Nothing you started is listening', 'Start at login', 'Quit Portlight']);
+  assert.deepEqual(titles(menu), ['Nothing you started is listening', 'Start a dev server and it appears here', 'Start automatically when my Mac starts', 'Quit Portlight']);
 });
 
 test('parseMenuId', () => {

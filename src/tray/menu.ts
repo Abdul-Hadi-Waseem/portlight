@@ -127,7 +127,12 @@ export function buildMenu(state: MenuState): MenuItem[] {
   const others = state.servers.filter((server) => !isPrimary(server));
   const items: MenuItem[] = [];
 
-  if (primary.length === 0) items.push(info(nextId, 'Nothing you started is listening'));
+  if (primary.length === 0) {
+    items.push(
+      info(nextId, 'Nothing you started is listening'),
+      info(nextId, 'Start a dev server and it appears here'),
+    );
+  }
   for (const { section, servers } of groupServers(primary, false)) {
     if (items.length > 0) items.push(separator(nextId));
     items.push(info(nextId, section.title.toUpperCase()), ...servers.map((server) => serverItem(server, state, nextId)));
@@ -142,7 +147,7 @@ export function buildMenu(state: MenuState): MenuItem[] {
   }
   items.push(
     separator(nextId),
-    { id: MenuAction.ToggleLogin, title: 'Start at login', checked: state.startAtLogin },
+    { id: MenuAction.ToggleLogin, title: 'Start automatically when my Mac starts', checked: state.startAtLogin },
     { id: MenuAction.Quit, title: 'Quit Portlight' },
   );
   return items;

@@ -23,7 +23,7 @@ CONTAINERS                                 Copy PID 41207
 SERVICES                                   up 2h 14m · local only
 ⚪  PostgreSQL · 5432                      ~/code/storefront
 Other ports (10)                           ─────
-Start at login                             Stop storefront…
+Start automatically…                       Stop storefront…
 Quit Portlight
 ```
 
@@ -31,7 +31,7 @@ Quit Portlight
 - **Health at a glance.** 🟢 answers HTTP, 🔴 not responding, ⚪ not a web server (a database, say).
 - **Docker containers by name.** A container's port is held by Docker Desktop on a Mac; Portlight asks Docker which container published it, and stops *that container* with `docker stop`.
 - **Everything else, explained.** Ports opened by VS Code extensions, AirDrop, AirPlay and friends are grouped under *Other ports* by app, with one plain sentence each on what it is and whether you need to care. Hover anything Portlight won't stop to see why.
-- **Start at login** from the menu, or `portlight login on`.
+- **Starts automatically** with your Mac: tick it in the menu, or run `portlight autostart on`.
 
 ## The command line
 
@@ -44,7 +44,7 @@ portlight kill --pid 41207   stop one process
 portlight open 3000          open http://localhost:3000
 portlight ls --json          machine-readable, for scripts
 portlight tray               put Portlight in the menu bar (tray --stop removes it)
-portlight login on|off       start the menu bar icon when you log in
+portlight autostart on|off   start the menu bar icon automatically when your Mac starts
 ```
 
 ## Stopping things safely

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { ExitCode } from '../core/constants.js';
 import { getPlatform } from '../platform/index.js';
-import { freeCommand, killCommand, listCommand, loginCommand, openCommand, trayCommand } from './commands.js';
+import { freeCommand, killCommand, listCommand, loginCommand, openCommand, trayCommand, welcomeOnce } from './commands.js';
 import { Command, DIGITS_ONLY, HELP, LoginSetting, MAX_PORT, TargetKind } from './constants.js';
 
 function version(): string {
@@ -52,7 +52,7 @@ async function main(argv: string[]): Promise<ExitCode> {
   if ((values.foreground || values.stop) && command !== Command.Tray) return usageError('--foreground and --stop only work with tray.');
 
   const platform = getPlatform();
-  if (command === Command.Login) {
+  if (command === Command.Autostart || command === Command.Login) {
     const settings: readonly string[] = Object.values(LoginSetting);
     if (arg !== undefined && !settings.includes(arg)) return usageError(`Expected "on" or "off", got "${arg}".`);
     return loginCommand(platform, arg as LoginSetting | undefined);
@@ -63,6 +63,7 @@ async function main(argv: string[]): Promise<ExitCode> {
   }
   if (command === Command.List) {
     if (arg !== undefined) return usageError(`Unexpected argument "${arg}".`);
+    if (!values.json) welcomeOnce();
     return listCommand(platform, { all: values.all, json: values.json });
   }
 

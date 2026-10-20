@@ -1,3 +1,4 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { ExitCode, LOCALHOST, Signal } from '../core/constants.js';
 import { portHolders } from '../core/port-check.js';
@@ -9,7 +10,8 @@ import { needsPassword, stopKey, stopRefusal, stopTarget } from '../core/stop-ta
 import { Health, Reach, StopOutcome, type PlatformAdapter, type Server, type StopResult } from '../core/types.js';
 import { clearTrayPid, recordSelf, runningTrayPid, setTrayAtLogin, startTrayInBackground } from '../tray/daemon.js';
 import { runTray } from '../tray/tray.js';
-import { LoginSetting, STATUS_DOT } from './constants.js';
+import { EMPTY_HINT, LoginSetting, STATUS_DOT, TRAY_TIP, WELCOME } from './constants.js';
+import { STATE_DIR, WELCOMED_FILE } from '../tray/constants.js';
 import { safeText } from '../core/format.js';
 import { formatBytes, formatDuration, link, paint, shortenHome, table } from './format.js';
 
@@ -89,7 +91,7 @@ export async function listCommand(platform: PlatformAdapter, options: ListOption
   const now = Date.now();
   const groups = groupServers(shown, options.all);
   const row = options.all ? wideRow : serverRow;
-  if (groups.length === 0) console.log(paint('dim', 'Nothing you started is listening.'));
+  if (groups.length === 0) console.log(EMPTY_HINT);
   else {
     const sections = groups.map(({ section, servers: rows }) => ({
       title: section.title,
@@ -100,6 +102,7 @@ export async function listCommand(platform: PlatformAdapter, options: ListOption
 
   const hidden = servers.length - shown.length;
   if (hidden > 0) console.log(paint('dim', `\n${hidden} more (apps & system) · portlight ls --all`));
+  if ((await runningTrayPid(platform)) === null) console.log(paint('dim', TRAY_TIP));
   return ExitCode.Ok;
 }
 
@@ -232,12 +235,20 @@ export async function trayCommand(platform: PlatformAdapter, options: TrayComman
     return ExitCode.Ok;
   }
   if (running !== null && !(options.foreground && running === process.pid)) {
-    console.log(`Portlight is already in the menu bar (PID ${running}).`);
+    console.log('Portlight is already in your menu bar: look for its icon at the top right of your screen.');
     return ExitCode.Ok;
   }
   if (!options.foreground) {
-    const pid = await startTrayInBackground(platform);
-    console.log(`Portlight is in your menu bar (PID ${pid}). \`portlight tray --stop\` removes it.`);
+    await startTrayInBackground(platform);
+    console.log(
+      [
+        'Portlight is now in your menu bar: look for its icon (two stacked bars) at the top right of',
+        'your screen and click it to see your servers.',
+        '',
+        `  portlight autostart on   start it automatically when your Mac starts${platform.isStartAtLogin() ? ' (already on)' : ''}`,
+        '  portlight tray --stop    remove it',
+      ].join('\n'),
+    );
     return ExitCode.Ok;
   }
 
@@ -257,6 +268,23 @@ export function loginCommand(platform: PlatformAdapter, setting: LoginSetting | 
     console.error((error as Error).message);
     return ExitCode.Error;
   }
-  console.log(platform.isStartAtLogin() ? 'Portlight starts in the menu bar when you log in.' : 'Portlight does not start at login.');
+  console.log(
+    platform.isStartAtLogin()
+      ? 'Autostart is on: Portlight appears in your menu bar whenever your Mac starts.'
+      : 'Autostart is off: run `portlight tray` to show the menu bar icon.',
+  );
   return ExitCode.Ok;
+}
+
+/** Shows the welcome once, the first time Portlight is run. Returns true if it was shown. */
+export function welcomeOnce(): boolean {
+  if (existsSync(WELCOMED_FILE)) return false;
+  console.log(WELCOME);
+  try {
+    mkdirSync(STATE_DIR, { recursive: true });
+    writeFileSync(WELCOMED_FILE, new Date().toISOString());
+  } catch {
+    // Can't remember it: showing it again next time is harmless.
+  }
+  return true;
 }
