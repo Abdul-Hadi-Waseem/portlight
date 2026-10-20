@@ -73,5 +73,6 @@ test('formatters', () => {
   assert.equal(formatDuration((2 * 60 + 14) * 60_000), '2h 14m');
   assert.equal(formatDuration(26 * 3_600_000), '1d 2h');
   assert.equal(shortenHome('/Users/hadi/app', '/Users/hadi'), '~/app');
+  assert.equal(shortenHome('C:\\Users\\hadi\\code\\app', 'C:\\Users\\hadi'), '~\\code\\app');
   assert.equal(shortenHome('/Users/hadiX', '/Users/hadi'), '/Users/hadiX');
 });

@@ -13,7 +13,10 @@ import { StopOutcome, type Server } from '../src/core/types.js';
 import { getPlatform } from '../src/platform/index.js';
 
 const isMac = process.platform === 'darwin';
-const platform = isMac ? getPlatform() : null;
+const isWindows = process.platform === 'win32';
+/** Scanning and stopping work on both; zombies, Ctrl-Z and `sh` are Mac-only. */
+const canScan = isMac || isWindows;
+const platform = canScan ? getPlatform() : null;
 const children: ChildProcess[] = [];
 const groups: number[] = [];
 after(() => {
@@ -57,20 +60,22 @@ async function findServer(port: number): Promise<Server> {
   return server;
 }
 
-test('scan finds a real server with its pid, folder and command', { skip: !isMac }, async () => {
+test('scan finds a real server with its pid, folder and command', { skip: !canScan }, async () => {
   const { child, port, cwd } = await startServer();
   const server = await findServer(port);
   assert.equal(server.pid, child.pid);
-  assert.equal(server.cwd, cwd);
+  // Windows doesn't reveal another process's folder.
+  assert.equal(server.cwd, isWindows ? null : cwd);
   assert.match(server.commandLine, /node.* -e /);
   assert.ok(server.startedAt instanceof Date);
 });
 
-test('stopServer stops politely with SIGTERM', { skip: !isMac }, async () => {
+test('stopServer stops a server (politely on macOS, force-stop on Windows)', { skip: !canScan }, async () => {
   const { port } = await startServer();
   const server = await findServer(port);
   const result = await stopServer(platform!, server);
-  assert.equal(result.outcome, StopOutcome.Stopped);
+  // Windows has no polite stop for a terminal program: the same checks, then a force-stop.
+  assert.equal(result.outcome, isWindows ? StopOutcome.Forced : StopOutcome.Stopped);
   assert.equal(await isRunning(server.pid), false);
 });
 
@@ -97,7 +102,7 @@ test('stopServer escalates to SIGKILL when SIGTERM is ignored', { skip: !isMac }
   assert.equal(await isRunning(server.pid), false);
 });
 
-test('stopServer refuses when the pid now belongs to a different process', { skip: !isMac }, async () => {
+test('stopServer refuses when the pid now belongs to a different process', { skip: !canScan }, async () => {
   const { port } = await startServer();
   const server = await findServer(port);
   const stale: Server = { ...server, startedAt: new Date(0) };
@@ -106,7 +111,7 @@ test('stopServer refuses when the pid now belongs to a different process', { ski
   assert.equal(await isRunning(server.pid), true, 'the live process must be left alone');
 });
 
-test('stopServer reports a process that already exited', { skip: !isMac }, async () => {
+test('stopServer reports a process that already exited', { skip: !canScan }, async () => {
   const { child, port } = await startServer();
   const server = await findServer(port);
   child.kill('SIGKILL');
@@ -169,7 +174,7 @@ test('CLI rejects loose arguments with the usage exit code', async () => {
   }
 });
 
-test('CLI: ls --json lists the server and free -y frees the port', { skip: !isMac }, async () => {
+test('CLI: ls --json lists the server and free -y frees the port', { skip: !canScan }, async () => {
   const run = promisify(execFile);
   const { port } = await startServer();
 
@@ -181,7 +186,7 @@ test('CLI: ls --json lists the server and free -y frees the port', { skip: !isMa
   assert.match((await run(process.execPath, [cli, 'free', String(port)])).stdout, new RegExp(`Port ${port} is free`));
 });
 
-test('tray pid file: a pid now used by another process is ignored and the file removed', { skip: !isMac }, async () => {
+test('tray pid file: a pid now used by another process is ignored and the file removed', { skip: !canScan }, async () => {
   const { writeTrayRecord, runningTrayPid } = await import('../src/tray/daemon.js');
   const { TRAY_PID_FILE } = await import('../src/tray/constants.js');
   const { existsSync, readFileSync, writeFileSync } = await import('node:fs');

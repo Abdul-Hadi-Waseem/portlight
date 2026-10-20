@@ -45,3 +45,12 @@ export const OSASCRIPT_USER_CANCELLED = '(-128)';
 
 /** Editors offered for "Open in…", in order of preference when the user hasn't chosen one. */
 export const KNOWN_EDITORS = ['Cursor', 'Visual Studio Code', 'Zed', 'Windsurf', 'WebStorm', 'Sublime Text'] as const;
+
+/** Start times from the Windows scan script: `2026-10-21T09:15:02.123Z` (UTC, milliseconds). */
+export const WINDOWS_ISO_TIME_SAFE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/** Per-user "run at login" registry key, and Portlight's value in it. */
+export const WINDOWS_RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+export const WINDOWS_RUN_VALUE = 'Portlight';
+/** Windows service names safe to put into an elevated command: `postgresql-x64-16`, `MySQL80`. */
+export const WINDOWS_SERVICE_NAME_SAFE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;

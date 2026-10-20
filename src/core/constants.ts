@@ -7,6 +7,10 @@ export const LOCALHOST = 'localhost';
 export const SYSTEM_PATH_PREFIXES = ['/System/', '/usr/libexec/', '/usr/sbin/', '/sbin/'] as const;
 export const APP_PATH_MARKERS = ['/Applications/', '.app/Contents/'] as const;
 
+/** Windows: the OS itself, and where installed apps live (compared case-insensitively). */
+export const WINDOWS_SYSTEM_PATH = /^"?[A-Za-z]:\\Windows\\/i;
+export const WINDOWS_APP_PATH = /^"?[A-Za-z]:\\(?:Program Files(?: \(x86\))?|Users\\[^\\]+\\AppData\\Local\\Programs)\\/i;
+
 /**
  * Container runtimes publish container ports from their own processes. Signalling one of these
  * would take down every container, so they are never stopped directly.
@@ -54,6 +58,7 @@ export const PROBE_BINDS = [
 export const PROJECT_SEARCH_DEPTH = 6;
 export const PACKAGE_JSON = 'package.json';
 export const GIT_DIR = '.git';
+export const NODE_MODULES_DIR = 'node_modules';
 
 /** package.json dependencies only say something about processes run by a JS runtime. */
 export const JS_RUNTIME_NAMES = ['node', 'bun'] as const;

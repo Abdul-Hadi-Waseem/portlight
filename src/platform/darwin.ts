@@ -165,6 +165,7 @@ function findEditor(preferred: string | null): string | null {
 }
 
 export const darwin: PlatformAdapter = {
+  gracefulStop: true,
   openFolder,
   findEditor,
   findServiceJob,

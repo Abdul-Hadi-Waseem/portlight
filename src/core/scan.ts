@@ -7,6 +7,8 @@ import {
   DEV_RUNTIME_NAMES,
   LOOPBACK_ADDRESSES,
   SYSTEM_PATH_PREFIXES,
+  WINDOWS_APP_PATH,
+  WINDOWS_SYSTEM_PATH,
 } from './constants.js';
 import { customName, loadConfig, type PortlightConfig } from './config.js';
 import { detectFramework, findProjectCached } from './detect.js';
@@ -36,11 +38,13 @@ export function isContainerRuntime(info: Pick<ProcessInfo, 'name' | 'commandLine
 
 export function classify(info: Pick<ProcessInfo, 'user' | 'name' | 'commandLine'>, me: string): ServerKind {
   if (info.user !== me) return ServerKind.System;
-  if (SYSTEM_PATH_PREFIXES.some((prefix) => info.commandLine.startsWith(prefix))) return ServerKind.System;
+  if (SYSTEM_PATH_PREFIXES.some((prefix) => info.commandLine.startsWith(prefix)) || WINDOWS_SYSTEM_PATH.test(info.commandLine)) {
+    return ServerKind.System;
+  }
   if (isContainerRuntime(info)) return ServerKind.ContainerRuntime;
   const devRuntimes: readonly string[] = DEV_RUNTIME_NAMES;
   if (info.name !== null && devRuntimes.includes(info.name)) return ServerKind.Dev;
-  if (APP_PATH_MARKERS.some((marker) => info.commandLine.includes(marker))) return ServerKind.App;
+  if (APP_PATH_MARKERS.some((marker) => info.commandLine.includes(marker)) || WINDOWS_APP_PATH.test(info.commandLine)) return ServerKind.App;
   return ServerKind.Dev;
 }
 
@@ -58,7 +62,7 @@ export function buildServers(listeners: Listener[], processes: Map<number, Proce
     const processName = safeText(info?.name ?? listener.processName);
     const commandLine = info?.commandLine ?? '';
     const cwd = info?.cwd ?? null;
-    const project = findProjectCached(cwd);
+    const project = findProjectCached(cwd, commandLine);
     const framework = detectFramework(commandLine, processName, project?.deps);
     const baseKind = info ? classify(info, me) : ServerKind.System;
     const kind = framework?.service ? ServerKind.Service : baseKind;

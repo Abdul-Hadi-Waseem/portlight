@@ -22,7 +22,8 @@ export function formatDuration(ms: number): string {
 
 /** `~/repos/app` instead of `/Users/me/repos/app`. Output is safe to print. */
 export function shortenHome(path: string, home: string = os.homedir()): string {
-  return safeText(path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path);
+  const inHome = path === home || path.startsWith(`${home}/`) || path.startsWith(`${home}\\`);
+  return safeText(inHome ? `~${path.slice(home.length)}` : path);
 }
 
 /**

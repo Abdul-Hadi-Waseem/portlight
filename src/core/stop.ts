@@ -57,7 +57,8 @@ function signal(pid: number, name: (typeof Signal)[keyof typeof Signal]): void {
  * Stops a server the user picked from an earlier scan:
  * 1. re-read the process and refuse unless it is still the same one (start time + command),
  *    owned by this user and not a system process;
- * 2. SIGTERM, plus SIGCONT so a suspended (Ctrl-Z) process can act on it;
+ * 2. SIGTERM, plus SIGCONT so a suspended (Ctrl-Z) process can act on it (skipped where the OS
+ *    has no polite stop: Windows);
  * 3. after the grace period, verify identity again and only then SIGKILL.
  */
 export async function stopServer(
@@ -75,9 +76,11 @@ export async function stopServer(
     const refusal = await verify();
     if (refusal) return result(StopOutcome.Refused, refusal);
 
-    signal(pid, Signal.Term);
-    signal(pid, Signal.Continue);
-    if (await waitForExit(platform, pid, options.graceMs ?? STOP_GRACE_MS)) return result(StopOutcome.Stopped);
+    if (platform.gracefulStop) {
+      signal(pid, Signal.Term);
+      signal(pid, Signal.Continue);
+      if (await waitForExit(platform, pid, options.graceMs ?? STOP_GRACE_MS)) return result(StopOutcome.Stopped);
+    }
 
     const refusalBeforeKill = await verify();
     if (refusalBeforeKill) return result(StopOutcome.Refused, `${refusalBeforeKill} (checked before SIGKILL)`);

@@ -1,4 +1,5 @@
 import os from 'node:os';
+import path from 'node:path';
 import { stopContainer } from '../sources/docker.js';
 import { DEV_RUNTIME_NAMES, STOP_GRACE_MS } from './constants.js';
 import { currentUser } from './scan.js';
@@ -11,7 +12,10 @@ import { AdminOutcome, ServerKind, StopOutcome, type PlatformAdapter, type Serve
  * usually false for root processes: the safe direction, a refusal rather than a guess.
  */
 function startedInHome(server: Pick<Server, 'cwd'>, home: string): boolean {
-  return server.cwd !== null && server.cwd.startsWith(`${home}/`);
+  if (server.cwd === null) return false;
+  // path.relative, not "starts with home + /": Windows separates with "\\".
+  const inside = path.relative(home, server.cwd);
+  return inside !== '' && !inside.startsWith('..') && !path.isAbsolute(inside);
 }
 
 /**

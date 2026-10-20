@@ -71,7 +71,12 @@ export function trayCommandLine(cliEntry: string = fileURLToPath(new URL(`../cli
 export function isEphemeralInstall(cliEntry: string = trayCommandLine()[1] ?? ''): boolean {
   // macOS spells the temp folder two ways (/var/… and /private/var/…): check both.
   const tempDirs = [os.tmpdir(), realpathSync(os.tmpdir())];
-  return EPHEMERAL_PATH_MARKERS.some((marker) => cliEntry.includes(marker)) || tempDirs.some((dir) => cliEntry.startsWith(dir));
+  // Compare with forward slashes so the same markers match Windows paths (…\npm-cache\_npx\…).
+  const normalized = cliEntry.replace(/\\/g, '/');
+  return (
+    EPHEMERAL_PATH_MARKERS.some((marker) => normalized.includes(marker)) ||
+    tempDirs.some((dir) => cliEntry.toLowerCase().startsWith(dir.toLowerCase()))
+  );
 }
 
 export function setTrayAtLogin(platform: PlatformAdapter, enabled: boolean): void {
@@ -90,7 +95,7 @@ export async function startTrayInBackground(platform: PlatformAdapter): Promise<
   mkdirSync(STATE_DIR, { recursive: true });
   const log = openSync(TRAY_LOG_FILE, 'a');
   const [node = process.execPath, ...args] = trayCommandLine();
-  const child = spawn(node, args, { detached: true, stdio: ['ignore', log, log] });
+  const child = spawn(node, args, { detached: true, stdio: ['ignore', log, log], windowsHide: true });
   child.unref();
   if (!child.pid || !(await recordProcess(platform, child.pid))) throw new Error(`The tray did not start. See ${TRAY_LOG_FILE}.`);
   return child.pid;

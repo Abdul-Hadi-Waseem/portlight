@@ -92,6 +92,11 @@ export interface StopResult {
 }
 
 export interface PlatformAdapter {
+  /**
+   * The OS can ask a process to quit (SIGTERM) and resume a suspended one (SIGCONT). False on
+   * Windows, where stopping a terminal program is always a force-stop.
+   */
+  gracefulStop: boolean;
   listListeners(): Promise<Listener[]>;
   getProcesses(pids: number[]): Promise<Map<number, ProcessInfo>>;
   /** True while the pid exists and has not exited (a zombie counts as exited). */
