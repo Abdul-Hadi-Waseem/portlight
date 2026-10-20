@@ -15,6 +15,7 @@ jobs:
         os: [macos-latest, windows-latest]
         node: [22, 24]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,3 +24,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+        # CI only: also report the Windows probe's actual error code for a listener on ::
+      - name: Probe diagnostics
+        if: always()
+        shell: bash
+        run: node -e "const n=require('net');const s=n.createServer();s.listen(0,'::',()=>{const p=s.address().port;const t=n.createServer();t.once('error',e=>{console.log('bind :: ipv6Only over :: ->',e.code);process.exit(0)});t.listen({port:p,host:'::',ipv6Only:true,exclusive:true},()=>{console.log('bind :: ipv6Only over :: -> OK (not detected)');process.exit(0)})})"

@@ -21,6 +21,8 @@ const children: ChildProcess[] = [];
 const groups: number[] = [];
 after(() => {
   children.forEach((child) => child.kill('SIGKILL'));
+  // Diagnose CI hangs: what is still keeping this test process alive after the tests?
+  if (process.env.CI) setTimeout(() => console.log('[portlight] still open after tests:', process.getActiveResourcesInfo()), 2000).unref();
   for (const pgid of groups) {
     try {
       process.kill(-pgid, 'SIGKILL');
