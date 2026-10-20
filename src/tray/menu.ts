@@ -15,6 +15,12 @@ export interface MenuState {
   needsPassword?: Set<string>;
   now: number;
   startAtLogin: boolean;
+  /** Notifications on start/stop (config). */
+  notifications?: boolean;
+  /** Editor app to offer for "Open in…", or null when none is installed. */
+  editor?: string | null;
+  /** How many dev servers "Stop all dev servers" would stop. */
+  stopAllCount?: number;
 }
 
 /** Unique per row: two containers can share the runtime's pid and a port number. */
@@ -69,9 +75,18 @@ function serverItem(server: Server, state: MenuState, nextId: NextId): MenuItem 
   const facts = container
     ? [container.image, `container ${container.name}`]
     : [detail, server.processName !== detail ? server.processName : null, formatBytes(server.memoryBytes)];
+  // Open the project where it lives: a container's folder is the runtime's, so not for those.
+  const folder = !container && server.cwd && server.cwd !== '/' ? server.cwd : null;
+  const openFolder: MenuItem[] = folder
+    ? [
+        ...(state.editor ? [{ id: menuId(MenuAction.OpenEditor, server), title: `Open in ${state.editor}` }] : []),
+        { id: menuId(MenuAction.RevealFinder, server), title: 'Show in Finder' },
+      ]
+    : [];
   const items: MenuItem[] = [
     ...web,
     copy,
+    ...openFolder,
     separator(nextId),
     info(nextId, facts.filter(Boolean).join(' · ')),
     info(nextId, [uptime, reach].filter(Boolean).join(' · ')),
@@ -145,8 +160,16 @@ export function buildMenu(state: MenuState): MenuItem[] {
       items: otherGroups(others, nextId),
     });
   }
+  const stopAll = state.stopAllCount ?? 0;
+  if (stopAll > 0) {
+    items.push(separator(nextId), {
+      id: MenuAction.StopAllDev,
+      title: stopAll === 1 ? 'Stop my dev server…' : `Stop all ${stopAll} dev servers…`,
+    });
+  }
   items.push(
     separator(nextId),
+    { id: MenuAction.ToggleNotify, title: 'Notify when servers start or stop', checked: state.notifications ?? true },
     { id: MenuAction.ToggleLogin, title: 'Start automatically when my Mac starts', checked: state.startAtLogin },
     { id: MenuAction.Quit, title: 'Quit Portlight' },
   );

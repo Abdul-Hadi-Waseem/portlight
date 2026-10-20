@@ -8,6 +8,7 @@ import {
   LOOPBACK_ADDRESSES,
   SYSTEM_PATH_PREFIXES,
 } from './constants.js';
+import { customName, loadConfig, type PortlightConfig } from './config.js';
 import { detectFramework, findProjectCached } from './detect.js';
 import { APP_EXPLANATION, EXPLANATIONS, FRIENDLY_NAMES, HOW_TO_STOP, SYSTEM_EXPLANATION } from './explanations.js';
 import { safeText } from './format.js';
@@ -124,7 +125,13 @@ export async function scan(platform: PlatformAdapter): Promise<Server[]> {
   const servers = buildServers(listeners, processes, currentUser());
   // Only ask Docker when a runtime holds a port: no daemon round-trip on every scan otherwise.
   const needsDocker = servers.some((server) => server.kind === ServerKind.ContainerRuntime);
-  return needsDocker ? attachContainers(servers, await listContainers()) : servers;
+  const named = needsDocker ? attachContainers(servers, await listContainers()) : servers;
+  return applyCustomNames(named, loadConfig());
+}
+
+/** The user's names from their config win over anything Portlight detected. */
+export function applyCustomNames(servers: Server[], config: PortlightConfig): Server[] {
+  return servers.map((server) => ({ ...server, customName: customName(config, server.port, server.commandLine) }));
 }
 
 /** Local if every address is loopback; anything bound to `*`, 0.0.0.0 or a LAN IP is reachable from the network. */
@@ -141,7 +148,13 @@ export interface NameParts {
 }
 
 /** `storefront` + `Next.js`; `PostgreSQL` alone; the process name when nothing better is known. */
-export function nameParts(server: Pick<Server, 'framework' | 'project' | 'processName' | 'kind'> & { appName?: string | null }): NameParts {
+export function nameParts(
+  server: Pick<Server, 'framework' | 'project' | 'processName' | 'kind'> & { appName?: string | null; customName?: string | null },
+): NameParts {
+  if (server.customName) {
+    const detail = server.framework ?? server.processName;
+    return { name: server.customName, detail: detail !== server.customName ? detail : null };
+  }
   if (server.kind === ServerKind.App || server.kind === ServerKind.System) {
     const name = FRIENDLY_NAMES[server.processName] ?? server.appName ?? server.framework ?? server.processName;
     return { name, detail: name !== server.processName ? server.processName : null };
@@ -151,7 +164,9 @@ export function nameParts(server: Pick<Server, 'framework' | 'project' | 'proces
 }
 
 /** `Next.js · storefront`, `PostgreSQL`, or the process name: for dialogs and notifications. */
-export function displayName(server: Pick<Server, 'framework' | 'project' | 'processName' | 'kind'> & { appName?: string | null }): string {
+export function displayName(
+  server: Pick<Server, 'framework' | 'project' | 'processName' | 'kind'> & { appName?: string | null; customName?: string | null },
+): string {
   const { name, detail } = nameParts(server);
   return detail ? `${detail} · ${name}` : name;
 }

@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { createInterface } from 'node:readline/promises';
 import { ExitCode, LOCALHOST, Signal } from '../core/constants.js';
 import { portHolders } from '../core/port-check.js';
@@ -6,11 +7,21 @@ import { isPortBindable } from '../core/probe.js';
 import { checkAll } from '../core/health.js';
 import { currentUser, nameParts, reachOf, scan, displayName } from '../core/scan.js';
 import { groupServers, isPrimary } from '../core/sections.js';
-import { needsPassword, stopKey, stopRefusal, stopTarget } from '../core/stop-target.js';
+import { needsPassword, stopKey, stoppableDevServers, stopRefusal, stopTarget } from '../core/stop-target.js';
 import { Health, Reach, StopOutcome, type PlatformAdapter, type Server, type StopResult } from '../core/types.js';
 import { clearTrayPid, recordSelf, runningTrayPid, setTrayAtLogin, startTrayInBackground } from '../tray/daemon.js';
 import { runTray } from '../tray/tray.js';
-import { EMPTY_HINT, LoginSetting, STATUS_DOT, TRAY_TIP, WELCOME } from './constants.js';
+import {
+  EMPTY_HINT,
+  LoginSetting,
+  MAX_PORT,
+  STATUS_DOT,
+  TRAY_TIP,
+  WAIT_POLL_MS,
+  WATCH_INTERVAL_MS,
+  WELCOME,
+} from './constants.js';
+import { ChangeTracker } from '../core/changes.js';
 import { STATE_DIR, WELCOMED_FILE } from '../tray/constants.js';
 import { safeText } from '../core/format.js';
 import { formatBytes, formatDuration, link, paint, shortenHome, table } from './format.js';
@@ -287,4 +298,77 @@ export function welcomeOnce(): boolean {
     // Can't remember it: showing it again next time is harmless.
   }
   return true;
+}
+
+function timeStamp(date: Date = new Date()): string {
+  return paint('dim', date.toTimeString().slice(0, 8));
+}
+
+/** A live feed of your servers starting and stopping, until Ctrl-C. */
+export async function watchCommand(platform: PlatformAdapter): Promise<ExitCode> {
+  const tracker = new ChangeTracker();
+  const first = await scan(platform);
+  tracker.update(first);
+  const primary = first.filter(isPrimary);
+  console.log(`${timeStamp()}  watching: ${primary.length === 0 ? 'nothing running yet' : primary.map((s) => `${nameParts(s).name} :${s.port}`).join(', ')}`);
+  console.log(paint('dim', 'Start or stop a server and it shows up here. Ctrl-C to quit.'));
+  for (;;) {
+    await sleep(WATCH_INTERVAL_MS);
+    let current: Server[];
+    try {
+      current = await scan(platform);
+    } catch (error) {
+      // One failed scan (a timeout, say) shouldn't end the watch: say so and try again.
+      console.log(`${timeStamp()}  ${paint('yellow', `scan failed: ${(error as Error).message}`)}`);
+      continue;
+    }
+    const { started, stopped } = tracker.update(current);
+    for (const server of started) console.log(`${timeStamp()}  ${paint('green', '▲ started')}  ${displayName(server)}  ${paint('cyan', `:${server.port}`)}`);
+    for (const server of stopped) console.log(`${timeStamp()}  ${paint('red', '▼ stopped')}  ${displayName(server)}  ${paint('cyan', `:${server.port}`)}`);
+  }
+}
+
+export interface WaitOptions {
+  free: boolean;
+  timeoutS: number;
+}
+
+/** Waits until something listens on `port` (or, with --free, until nothing does). For scripts. */
+export async function waitCommand(port: number, options: WaitOptions): Promise<ExitCode> {
+  const deadline = Date.now() + options.timeoutS * 1000;
+  const goal = options.free ? 'free' : 'up';
+  while (Date.now() < deadline) {
+    // Binding is the ground truth for "is the port in use", whoever owns it, and costs no scan.
+    const inUse = !(await isPortBindable(port));
+    if (inUse !== options.free) {
+      console.log(`Port ${port} is ${goal}.`);
+      return ExitCode.Ok;
+    }
+    await sleep(WAIT_POLL_MS);
+  }
+  console.error(`Gave up after ${options.timeoutS} s: port ${port} is not ${goal}.`);
+  return ExitCode.Error;
+}
+
+/** Prints the first free port from `from` upwards: nothing listening, and bindable. */
+export async function nextCommand(platform: PlatformAdapter, from: number): Promise<ExitCode> {
+  const taken = new Set((await scan(platform)).map((server) => server.port));
+  for (let port = from; port <= MAX_PORT; port += 1) {
+    if (!taken.has(port) && (await isPortBindable(port))) {
+      console.log(port);
+      return ExitCode.Ok;
+    }
+  }
+  console.error(`No free port from ${from} to ${MAX_PORT}.`);
+  return ExitCode.Error;
+}
+
+export async function killAllDevCommand(platform: PlatformAdapter, options: StopCommandOptions): Promise<ExitCode> {
+  const targets = stoppableDevServers(await scan(platform), currentUser());
+  if (targets.length === 0) {
+    console.log('No dev servers running.');
+    return ExitCode.Ok;
+  }
+  const count = new Set(targets.map(stopKey)).size;
+  return stopTargets(platform, targets, `Stop ${count === 1 ? 'this dev server' : `these ${count} dev servers`}?`, options);
 }

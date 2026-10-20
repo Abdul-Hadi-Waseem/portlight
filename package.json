@@ -1,6 +1,6 @@
 {
   "name": "portlight",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "See every port your Mac is listening on, what started it, and stop it safely. Menu bar app + CLI.",
   "keywords": [
     "ports",

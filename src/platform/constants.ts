@@ -42,3 +42,6 @@ export const HOMEBREW_LABEL_PREFIX = 'homebrew.mxcl.';
 
 /** osascript's error when the user clicks Cancel in a dialog. */
 export const OSASCRIPT_USER_CANCELLED = '(-128)';
+
+/** Editors offered for "Open in…", in order of preference when the user hasn't chosen one. */
+export const KNOWN_EDITORS = ['Cursor', 'Visual Studio Code', 'Zed', 'Windsurf', 'WebStorm', 'Sublime Text'] as const;

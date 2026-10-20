@@ -1,9 +1,13 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { AdminOutcome, type Listener, type PlatformAdapter, type ProcessInfo, type ServiceJob } from '../core/types.js';
 import {
   APPLE_LABEL_PREFIX,
   HOMEBREW_FORMULA_SAFE,
   HOMEBREW_LABEL_PREFIX,
+  KNOWN_EDITORS,
   LSTART_TEXT_SAFE,
   OSASCRIPT_USER_CANCELLED,
   PS_FIELDS,
@@ -143,7 +147,26 @@ function adminTerminate(pid: number, startedAt: Date): Promise<{ outcome: AdminO
   return runAsAdmin(command);
 }
 
+async function openFolder(folder: string, app: string | null): Promise<void> {
+  // `open` has no `--`; an absolute path starts with "/", so it can never be read as an option.
+  if (!path.isAbsolute(folder)) throw new Error(`Not a folder path: ${folder}`);
+  // Finder: -R reveals the folder; plain `open` would launch a bundle folder like Foo.app.
+  await runChecked('open', app ? ['-a', app, folder] : ['-R', folder]);
+}
+
+function isInstalled(app: string): boolean {
+  return [path.join('/Applications', `${app}.app`), path.join(os.homedir(), 'Applications', `${app}.app`)].some((p) => existsSync(p));
+}
+
+function findEditor(preferred: string | null): string | null {
+  // An app *name*, never a path: `../Downloads/Evil` would otherwise point anywhere.
+  if (preferred && !preferred.includes('/') && !preferred.includes('..') && isInstalled(preferred)) return preferred;
+  return KNOWN_EDITORS.find(isInstalled) ?? null;
+}
+
 export const darwin: PlatformAdapter = {
+  openFolder,
+  findEditor,
   findServiceJob,
   stopServiceJob,
   adminTerminate,

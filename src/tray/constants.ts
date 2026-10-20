@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import { stateDir } from '../core/paths.js';
 import { Health } from '../core/types.js';
 
 /** Menu item ids are `<action>:<pid>:<port>`, so a click maps back to the exact server snapshot. */
@@ -11,6 +12,10 @@ export const MenuAction = {
   Stop: 'stop',
   Quit: 'quit',
   ToggleLogin: 'toggle-login',
+  ToggleNotify: 'toggle-notify',
+  StopAllDev: 'stop-all-dev',
+  OpenEditor: 'open-editor',
+  RevealFinder: 'reveal-finder',
   Info: 'info',
   Header: 'header',
   Server: 'server',
@@ -35,7 +40,7 @@ export const HEALTH_CACHE_MS = 30_000;
 export const TRAY_TOOLTIP = 'Portlight';
 export const NOTIFY_TITLE = 'Portlight';
 
-export const STATE_DIR = path.join(os.homedir(), '.config', 'portlight');
+export const STATE_DIR = stateDir();
 export const TRAY_PID_FILE = path.join(STATE_DIR, 'tray.json');
 /** The arguments a background tray runs with; also how a pid is recognised as our tray. */
 export const TRAY_COMMAND_MARKER = 'tray --foreground';
@@ -57,5 +62,12 @@ export const SERVER_ACTIONS: readonly string[] = [
   MenuAction.CopyUrl,
   MenuAction.CopyPid,
   MenuAction.CopyContainer,
+  MenuAction.OpenEditor,
+  MenuAction.RevealFinder,
   MenuAction.Stop,
 ];
+
+/** More changes than this at once become one summary notification instead of many. */
+export const MAX_CHANGE_NOTIFICATIONS = 3;
+/** A server Portlight itself just stopped already got a "Stopped" notification: don't announce it twice. */
+export const OWN_STOP_QUIET_MS = 15_000;

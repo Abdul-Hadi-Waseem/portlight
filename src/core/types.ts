@@ -65,6 +65,8 @@ export interface Server {
   probe: boolean;
   /** The Docker container that published this port, when the listener is the container runtime. */
   container: ContainerInfo | null;
+  /** The user's own name for it, from ~/.config/portlight/config.json. */
+  customName?: string | null;
 }
 
 export interface ContainerInfo {
@@ -99,6 +101,10 @@ export interface PlatformAdapter {
   /** Native yes/no dialog. Resolves true only when the user picks `confirmLabel`. */
   confirm(message: string, confirmLabel: string): Promise<boolean>;
   notify(title: string, message: string): Promise<void>;
+  /** Opens a folder in an app (an editor), or in the file browser when `app` is null. */
+  openFolder(folder: string, app: string | null): Promise<void>;
+  /** The editor to offer: `preferred` if installed, else the first known editor installed, else null. */
+  findEditor(preferred: string | null): string | null;
   /** The service manager job running `pid`, if any. */
   findServiceJob(pid: number): Promise<ServiceJob | null>;
   /** Stops a service through its manager (password dialog when `job.needsAdmin`). */

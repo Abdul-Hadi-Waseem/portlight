@@ -31,6 +31,9 @@ Quit Portlight
 - **Health at a glance.** 🟢 answers HTTP, 🔴 not responding, ⚪ not a web server (a database, say).
 - **Docker containers by name.** A container's port is held by Docker Desktop on a Mac; Portlight asks Docker which container published it, and stops *that container* with `docker stop`.
 - **Everything else, explained.** Ports opened by VS Code extensions, AirDrop, AirPlay and friends are grouped under *Other ports* by app, with one plain sentence each on what it is and whether you need to care. Hover anything Portlight won't stop to see why.
+- **Open the project** in your editor (Cursor, VS Code, Zed…) or in Finder, straight from the menu.
+- **Stop all dev servers** in one click at the end of the day. Databases and containers are left alone.
+- **Notifications** when a server starts or stops (switch them off in the menu).
 - **Starts automatically** with your Mac: tick it in the menu, or run `portlight autostart on`.
 
 ## The command line
@@ -41,11 +44,37 @@ portlight ls --all           every listening port, with PID and CPU
 portlight free 3000          is 3000 free? if not, offer to stop whatever holds it
 portlight kill 3000          stop everything on port 3000
 portlight kill --pid 41207   stop one process
+portlight kill --dev         stop all your dev servers (not databases or containers)
+portlight next               the next free port from 3000 (portlight next 8000)
 portlight open 3000          open http://localhost:3000
-portlight ls --json          machine-readable, for scripts
+portlight watch              live feed of servers starting and stopping
 portlight tray               put Portlight in the menu bar (tray --stop removes it)
 portlight autostart on|off   start the menu bar icon automatically when your Mac starts
 ```
+
+### In scripts
+
+```
+portlight wait 5432 && npm test          # wait for the database to be up
+portlight wait 3000 --free --timeout 30  # wait until the port is released
+PORT=$(portlight next 3000) npm run dev  # start on the first free port
+portlight ls --json                      # everything, machine-readable
+```
+
+## Your own names
+
+Name the ports Portlight can't guess in `~/.config/portlight/config.json`:
+
+```json
+{
+  "names": { "9000": "Payments API" },
+  "rules": [{ "match": "gateway", "name": "Gateway" }],
+  "editor": "Cursor",
+  "notifications": true
+}
+```
+
+`names` go by port; `rules` match any text in the command line. `editor` picks the app for *Open in…*.
 
 ## Stopping things safely
 

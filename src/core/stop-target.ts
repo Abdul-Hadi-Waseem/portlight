@@ -102,3 +102,8 @@ export async function describeStop(platform: PlatformAdapter, server: Server): P
   }
   return [`PID ${server.pid}`, server.cwd].filter(Boolean).join(' · ');
 }
+
+/** Your own dev servers that can be stopped without a password: the "end of the day" set. */
+export function stoppableDevServers(servers: Server[], me: string): Server[] {
+  return servers.filter((server) => server.kind === ServerKind.Dev && !needsPassword(server, me) && stopRefusal(server, me) === null);
+}

@@ -1,11 +1,13 @@
 import { fileURLToPath } from 'node:url';
 import { Tray, type MenuItem } from '@trayjs/trayjs';
+import { ChangeTracker, changeKey } from '../core/changes.js';
+import { loadConfig, updateConfig } from '../core/config.js';
 import { checkHealth } from '../core/health.js';
 import { portHolders } from '../core/port-check.js';
 import { currentUser, displayName, scan } from '../core/scan.js';
-import { describeStop, needsPassword, stopRefusal, stopTarget } from '../core/stop-target.js';
+import { describeStop, needsPassword, stopKey, stoppableDevServers, stopRefusal, stopTarget } from '../core/stop-target.js';
 import { StopOutcome, type Health, type PlatformAdapter, type Server } from '../core/types.js';
-import { HEALTH_CACHE_MS, MenuAction, SERVER_ACTIONS, NOTIFY_TITLE, TRAY_ICON_ICO, TRAY_ICON_PNG, TRAY_REFRESH_MS, TRAY_TOOLTIP } from './constants.js';
+import { HEALTH_CACHE_MS, MAX_CHANGE_NOTIFICATIONS, MenuAction, OWN_STOP_QUIET_MS, SERVER_ACTIONS, NOTIFY_TITLE, TRAY_ICON_ICO, TRAY_ICON_PNG, TRAY_REFRESH_MS, TRAY_TOOLTIP } from './constants.js';
 import { setTrayAtLogin } from './daemon.js';
 import { buildMenu, parseMenuId, serverKey, urlFor } from './menu.js';
 
@@ -27,7 +29,12 @@ export interface TrayController {
 }
 
 /** Everything the tray does, without the native tray: testable with a fake platform. */
-export function createTrayController(platform: PlatformAdapter): TrayController {
+export interface TrayControllerOptions {
+  /** Notify on servers starting/stopping (still subject to the user's setting). Tests turn it off. */
+  announceChanges?: boolean;
+}
+
+export function createTrayController(platform: PlatformAdapter, options: TrayControllerOptions = {}): TrayController {
   const healthCache = new Map<string, CachedHealth>();
   let snapshot = new Map<string, Server>();
   // Separate slots: opening the menu (with health) must not reuse a background build (without).
@@ -48,9 +55,29 @@ export function createTrayController(platform: PlatformAdapter): TrayController 
     return new Map(entries.filter((entry) => entry !== null));
   }
 
+  // Change notifications: one tracker, fed only by background builds (one steady source), and
+  // what we stopped ourselves (already announced by the stop itself).
+  const tracker = new ChangeTracker();
+  const stoppedByUs = new Map<string, number>();
+
+  async function announceChanges(servers: Server[]): Promise<void> {
+    const { started, stopped } = tracker.update(servers);
+    if (options.announceChanges === false || !loadConfig().notifications) return;
+    const now = Date.now();
+    for (const [key, at] of stoppedByUs) if (now - at > OWN_STOP_QUIET_MS) stoppedByUs.delete(key);
+    const lines = [
+      ...started.map((server) => `▲ ${displayName(server)} started on :${server.port}`),
+      ...stopped.filter((server) => !stoppedByUs.has(changeKey(server))).map((server) => `▼ ${displayName(server)} stopped (:${server.port})`),
+    ];
+    if (lines.length > MAX_CHANGE_NOTIFICATIONS) await platform.notify(NOTIFY_TITLE, `${lines.length} servers started or stopped`);
+    else for (const line of lines) await platform.notify(NOTIFY_TITLE, line);
+  }
+
   async function build(checkServers: boolean): Promise<MenuItem[]> {
     const servers = await scan(platform);
+    if (!checkServers) await announceChanges(servers);
     const me = currentUser();
+    const config = loadConfig();
     const refusals = new Map<string, string>();
     const passwordNeeded = new Set<string>();
     for (const server of servers) {
@@ -66,6 +93,9 @@ export function createTrayController(platform: PlatformAdapter): TrayController 
       needsPassword: passwordNeeded,
       now: Date.now(),
       startAtLogin: platform.isStartAtLogin(),
+      notifications: config.notifications,
+      editor: platform.findEditor(config.editor),
+      stopAllCount: new Set(stoppableDevServers(servers, me).map(stopKey)).size,
     });
   }
 
@@ -90,6 +120,7 @@ export function createTrayController(platform: PlatformAdapter): TrayController 
 
     const result = await stopTarget(platform, server);
     if (result.outcome === StopOutcome.Cancelled) return;
+    stoppedByUs.set(changeKey(server), Date.now());
     if (result.outcome === StopOutcome.Refused || result.outcome === StopOutcome.Failed) {
       await platform.notify(NOTIFY_TITLE, `Could not stop ${name}: ${result.reason ?? result.outcome}`);
       return;
@@ -101,6 +132,22 @@ export function createTrayController(platform: PlatformAdapter): TrayController 
     await platform.notify(NOTIFY_TITLE, message);
   }
 
+  /** One confirmation for all of them, then one summary: the end-of-day button. */
+  async function stopAllDev(): Promise<void> {
+    const targets = [...new Map(stoppableDevServers([...snapshot.values()], currentUser()).map((s) => [stopKey(s), s])).values()];
+    if (targets.length === 0) return;
+    const names = targets.map((server) => `• ${displayName(server)} (:${server.port})`).join('\n');
+    if (!(await platform.confirm(`Stop ${targets.length === 1 ? 'this dev server' : `these ${targets.length} dev servers`}?\n\n${names}`, 'Stop'))) return;
+    const results = [];
+    for (const server of targets) {
+      stoppedByUs.set(changeKey(server), Date.now());
+      results.push(await stopTarget(platform, server));
+    }
+    const stopped = results.filter((r) => r.outcome === StopOutcome.Stopped || r.outcome === StopOutcome.Forced || r.outcome === StopOutcome.AlreadyGone).length;
+    const failed = results.length - stopped;
+    await platform.notify(NOTIFY_TITLE, failed === 0 ? `Stopped ${stopped} dev server${stopped === 1 ? '' : 's'}.` : `Stopped ${stopped}; ${failed} could not be stopped.`);
+  }
+
   async function click(id: string): Promise<boolean> {
     const { action, key } = parseMenuId(id);
     if (action === MenuAction.Quit) return true;
@@ -110,6 +157,14 @@ export function createTrayController(platform: PlatformAdapter): TrayController 
       } catch (error) {
         await platform.notify(NOTIFY_TITLE, (error as Error).message);
       }
+      return false;
+    }
+    if (action === MenuAction.ToggleNotify) {
+      updateConfig({ notifications: !loadConfig().notifications });
+      return false;
+    }
+    if (action === MenuAction.StopAllDev) {
+      await stopAllDev();
       return false;
     }
     // Info lines can't be disabled in the native submenus (see menu.ts), so they do get clicked:
@@ -126,6 +181,8 @@ export function createTrayController(platform: PlatformAdapter): TrayController 
       else if (action === MenuAction.CopyUrl) await platform.copyText(urlFor(server));
       else if (action === MenuAction.CopyPid) await platform.copyText(String(server.pid));
       else if (action === MenuAction.CopyContainer && server.container) await platform.copyText(server.container.name);
+      else if (action === MenuAction.OpenEditor && server.cwd) await platform.openFolder(server.cwd, platform.findEditor(loadConfig().editor));
+      else if (action === MenuAction.RevealFinder && server.cwd) await platform.openFolder(server.cwd, null);
       else if (action === MenuAction.Stop) await stop(server);
     } catch (error) {
       await platform.notify(NOTIFY_TITLE, error instanceof Error ? error.message : String(error));
