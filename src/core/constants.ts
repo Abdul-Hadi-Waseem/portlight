@@ -51,6 +51,8 @@ export const PROBE_BINDS = [
   { host: '0.0.0.0' },
   { host: '127.0.0.1' },
   { host: '::', ipv6Only: true },
+  // Dual-stack too: on Windows an IPv6-only bind succeeds next to an existing `::` listener.
+  { host: '::' },
   { host: '::1' },
 ] as const;
 

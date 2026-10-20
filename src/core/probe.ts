@@ -4,9 +4,9 @@ import { PROBE_BINDS } from './constants.js';
 type ProbeBind = (typeof PROBE_BINDS)[number];
 
 /**
- * Error codes that mean "something already holds this port". Windows also answers EACCES when the
- * existing listener holds the port exclusively (and for ports Windows itself reserves): either way
- * the port can't be used. Elsewhere EACCES is about permissions, not the port, so it isn't counted.
+ * Error codes that mean "something already holds this port". On Windows EACCES also means the port
+ * can't be used (held exclusively, or reserved by Windows). Elsewhere EACCES is about permissions,
+ * not the port, so it isn't counted.
  */
 const IN_USE_CODES: readonly string[] = process.platform === 'win32' ? ['EADDRINUSE', 'EACCES'] : ['EADDRINUSE'];
 

@@ -154,8 +154,12 @@ for (const host of ['127.0.0.1', '0.0.0.0', '::1', '::']) {
     const server = net.createServer();
     await new Promise<void>((resolve) => server.listen(0, host, resolve));
     const { port } = server.address() as net.AddressInfo;
-    assert.equal(await isPortBindable(port), false);
-    await new Promise((resolve) => server.close(resolve));
+    try {
+      assert.equal(await isPortBindable(port), false);
+    } finally {
+      // Closed even when the assertion fails: an open server keeps the test process alive.
+      await new Promise((resolve) => server.close(resolve));
+    }
     assert.equal(await isPortBindable(port), true);
   });
 }
