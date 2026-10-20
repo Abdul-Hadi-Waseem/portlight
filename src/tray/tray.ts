@@ -32,6 +32,8 @@ export interface TrayController {
 export interface TrayControllerOptions {
   /** Notify on servers starting/stopping (still subject to the user's setting). Tests turn it off. */
   announceChanges?: boolean;
+  /** More changes than this in one scan become one summary notification. */
+  maxChangeNotifications?: number;
 }
 
 export function createTrayController(platform: PlatformAdapter, options: TrayControllerOptions = {}): TrayController {
@@ -69,7 +71,7 @@ export function createTrayController(platform: PlatformAdapter, options: TrayCon
       ...started.map((server) => `▲ ${displayName(server)} started on :${server.port}`),
       ...stopped.filter((server) => !stoppedByUs.has(changeKey(server))).map((server) => `▼ ${displayName(server)} stopped (:${server.port})`),
     ];
-    if (lines.length > MAX_CHANGE_NOTIFICATIONS) await platform.notify(NOTIFY_TITLE, `${lines.length} servers started or stopped`);
+    if (lines.length > (options.maxChangeNotifications ?? MAX_CHANGE_NOTIFICATIONS)) await platform.notify(NOTIFY_TITLE, `${lines.length} servers started or stopped`);
     else for (const line of lines) await platform.notify(NOTIFY_TITLE, line);
   }
 

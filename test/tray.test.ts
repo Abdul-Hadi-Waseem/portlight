@@ -234,18 +234,19 @@ test('controller: "Stop all dev servers" lists them and stops nothing when cance
 
 test('controller: announces servers that start and stop, not the ones already running', { skip: !isMac }, async () => {
   const { platform, calls } = fakeUi(true);
-  const controller = createTrayController(platform, { announceChanges: true });
-  await controller.menu(false); // first build: silent
-  assert.ok(!calls.some((c) => c.includes('tray-demo')));
+  // Other test files start and stop servers at the same time: no summary, and only look at our port.
+  const controller = createTrayController(platform, { announceChanges: true, maxChangeNotifications: Number.POSITIVE_INFINITY });
+  await controller.menu(false); // first build: the baseline, silent
   const { port, child } = await startProject();
+  const ours = () => calls.filter((c) => c.endsWith(`:${port}`) || c.endsWith(`(:${port})`));
   await controller.menu(true);
-  assert.ok(!calls.some((c) => c.includes('tray-demo')), 'only background builds announce');
+  assert.deepEqual(ours(), [], 'only background builds announce');
   await controller.menu(false);
-  assert.ok(calls.includes(`notify ▲ Express · tray-demo started on :${port}`), calls.join('\n'));
+  assert.deepEqual(ours(), [`notify ▲ Express · tray-demo started on :${port}`]);
   child.kill('SIGTERM');
   await new Promise((resolve) => child.once('exit', resolve));
   await controller.menu(false);
-  assert.ok(!calls.some((c) => c.includes('stopped')), 'one missing scan could be a restart: not yet');
+  assert.equal(ours().length, 1, 'one missing scan could be a restart: not yet');
   await controller.menu(false);
-  assert.ok(calls.includes(`notify ▼ Express · tray-demo stopped (:${port})`), calls.join('\n'));
+  assert.deepEqual(ours().slice(1), [`notify ▼ Express · tray-demo stopped (:${port})`]);
 });
